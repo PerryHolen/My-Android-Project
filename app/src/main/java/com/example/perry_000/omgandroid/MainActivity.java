@@ -10,6 +10,7 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.Window;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -19,6 +20,13 @@ import android.widget.ShareActionProvider;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.loopj.android.http.AsyncHttpClient;
+import com.loopj.android.http.JsonHttpResponseHandler;
+
+import org.json.JSONObject;
+
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 
 
@@ -28,22 +36,77 @@ public class MainActivity extends Activity implements View.OnClickListener, Adap
     Button mainButton;
     EditText mainEditText;
     ListView mainListView;
-    ArrayAdapter mArrayAdapter;
+    JSONAdapter mJSONAdapter;
     ArrayList mNameList = new ArrayList();
     ShareActionProvider mShareActionProvider;
     private static final String PREFS = "prefs";
     private static final String PREF_NAME = "name";
+    private static final String QUERY_URL = "http://openlibrary.org/search.json?q=";
     SharedPreferences mSharedPreferences;
+
+
+    private void queryBooks(String searchString) {
+
+        // Prepare your search string to be put in a URL
+        // It might have reserved characters or something
+        String urlString = "";
+        try {
+            urlString = URLEncoder.encode(searchString, "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+
+            // if this fails for some reason, let the user know why
+            e.printStackTrace();
+            Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+
+        // Create a client to perform networking
+        AsyncHttpClient client = new AsyncHttpClient();
+        // 11. start progress bar
+        setProgressBarIndeterminateVisibility(true);
+
+        // Have the client get a JSONArray of data
+        // and define how to respond
+        client.get(QUERY_URL + urlString,
+                new JsonHttpResponseHandler() {
+
+                    @Override
+                    public void onSuccess(JSONObject jsonObject) {
+                        // 11. stop progress bar
+                        setProgressBarIndeterminateVisibility(false);
+                        // Display a "Toast" message
+                        // to announce your success
+                        Toast.makeText(getApplicationContext(), "Success!", Toast.LENGTH_LONG).show();
+
+                        // update the data in your custom method.
+                        mJSONAdapter.updateData(jsonObject.optJSONArray("docs"));
+                    }
+
+                    @Override
+                    public void onFailure(int statusCode, Throwable throwable, JSONObject error) {
+                        // 11. stop progress bar
+                        setProgressBarIndeterminateVisibility(false);
+                        // Display a "Toast" message
+                        // to announce the failure
+                        Toast.makeText(getApplicationContext(), "Error: " + statusCode + " " + throwable.getMessage(), Toast.LENGTH_LONG).show();
+
+                        // Log error message
+                        // to help solve any problems
+                        Log.e("omg android", statusCode + " " + throwable.getMessage());
+                    }
+                });
+    }
 
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // 11. Add a spinning progress bar (and make sure it's off)
+        requestWindowFeature(Window.FEATURE_INDETERMINATE_PROGRESS);
+        setProgressBarIndeterminateVisibility(false);
         setContentView(R.layout.activity_main);
         // 1. Access the TextView defined in layout XML
         // and then set its text
         mainTextView = (TextView) findViewById(R.id.main_textview);
-        mainTextView.setText("Set in Java!");
         // 2. Access the Button defined in layout XML
         // and listen for it here
         mainButton = (Button) findViewById(R.id.main_button);
@@ -53,19 +116,17 @@ public class MainActivity extends Activity implements View.OnClickListener, Adap
         // 4. Access the ListView
         mainListView = (ListView) findViewById(R.id.main_listview);
 
-        // Create an ArrayAdapter for the ListView
-        mArrayAdapter = new ArrayAdapter(this,
-                android.R.layout.simple_list_item_1,
-                mNameList);
-
-        // Set the ListView to use the ArrayAdapter
-        mainListView.setAdapter(mArrayAdapter);
-
         // 5. Set this activity to react to list items being pressed
         mainListView.setOnItemClickListener(this);
 
         // 7. Greet the user, or ask for their name if new
         displayWelcome();
+
+        // 10. Create a JSONAdapter for the ListView
+        mJSONAdapter = new JSONAdapter(this, getLayoutInflater());
+
+        // Set the ListView to use the ArrayAdapter
+        mainListView.setAdapter(mJSONAdapter);
     }
 
 
@@ -109,25 +170,13 @@ public class MainActivity extends Activity implements View.OnClickListener, Adap
 
     @Override
     public void onClick(View v) {
-        // Take what was typed into the EditText
-        // and use in TextView
-        mainTextView.setText(mainEditText.getText().toString()
-                + " is learning Android development!");
-
-        // Also add that value to the list shown in the ListView
-        mNameList.add(mainEditText.getText().toString());
-        mArrayAdapter.notifyDataSetChanged();
-
-        // 6. The text you'd like to share has changed,
-        // and you need to update
-        setShareIntent();
+        // 9. Take what was typed into the EditText and use in search
+        queryBooks(mainEditText.getText().toString());
     }
 
     @Override
     public void onItemClick(AdapterView parent, View view, int position, long id) {
-        // Log the item's position and contents
-        // to the console in Debug
-        Log.d("omg android", position + ": " + mNameList.get(position));
+
     }
 
     public void displayWelcome() {
